@@ -990,6 +990,7 @@ class VoiceBox(Module):
         *,
         times,
         cond_token_ids,
+        ft_cond = None,
         self_attn_mask = None,
         cond_drop_prob = 0.1,
         target = None,
@@ -1033,6 +1034,10 @@ class VoiceBox(Module):
         # as described in section 3.2
 
         cond = cond * ~cond_mask_with_pad_dim
+
+                # add in optional extra cond
+        if ft_cond is not None:
+            cond = cond + ft_cond[:,:cond.shape[1],:] # just add :)
 
         # classifier free guidance
 
@@ -1177,6 +1182,7 @@ class ConditionalFlowMatcherWrapper(Module):
         self,
         *,
         cond = None,
+        ft_cond=None,
         texts: Optional[List[str]] = None,
         text_token_ids: Optional[Tensor] = None,
         semantic_token_ids: Optional[Tensor] = None,
@@ -1276,6 +1282,7 @@ class ConditionalFlowMatcherWrapper(Module):
                 times = t,
                 cond_token_ids = cond_token_ids,
                 cond = cond,
+                ft_cond=ft_cond,
                 cond_scale = cond_scale,
                 cond_mask = cond_mask,
                 self_attn_mask = self_attn_mask
@@ -1333,6 +1340,7 @@ class ConditionalFlowMatcherWrapper(Module):
         self,
         x1,
         *,
+        ft_cond=None,
         mask = None,
         semantic_token_ids = None,
         phoneme_ids = None,
@@ -1416,6 +1424,7 @@ class ConditionalFlowMatcherWrapper(Module):
         loss = self.voicebox(
             w,
             cond = cond,
+            ft_cond=ft_cond,
             cond_mask = cond_mask,
             times = times,
             target = flow,
