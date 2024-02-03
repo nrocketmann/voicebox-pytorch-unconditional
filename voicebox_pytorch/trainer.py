@@ -1,6 +1,8 @@
-from pathlib import Path
 import re
+from pathlib import Path
 from shutil import rmtree
+from functools import partial
+from contextlib import nullcontext
 
 from beartype import beartype
 
@@ -14,6 +16,7 @@ from voicebox_pytorch.data import get_dataloader
 from voicebox_pytorch.optimizer import get_optimizer
 
 from accelerate import Accelerator, DistributedType
+from accelerate.utils import DistributedDataParallelKwargs
 
 # helpers
 
@@ -83,7 +86,10 @@ class VoiceBoxTrainer(nn.Module):
     ):
         super().__init__()
 
+        ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters = True)
+
         self.accelerator = Accelerator(
+            kwargs_handlers = [ddp_kwargs],
             split_batches = split_batches,
             **accelerate_kwargs
         )
@@ -149,14 +155,12 @@ class VoiceBoxTrainer(nn.Module):
             self.cfm_wrapper,
             self.optim,
             self.scheduler,
-            self.dl,
-            self.valid_dl
+            self.dl
         ) = self.accelerator.prepare(
             self.cfm_wrapper,
             self.optim,
             self.scheduler,
-            self.dl,
-            self.valid_dl
+            self.dl
         )
 
         # dataloader iterators
@@ -254,12 +258,16 @@ class VoiceBoxTrainer(nn.Module):
 
         # training step
 
-        for _ in range(self.grad_accum_every):
+        for grad_accum_step in range(self.grad_accum_every):
+            is_last = grad_accum_step == (self.grad_accum_every - 1)
+            context = partial(self.accelerator.no_sync, self.cfm_wrapper) if not is_last else nullcontext
+
             wave, = next(self.dl_iter)
 
-            loss = self.cfm_wrapper(wave)
+            with self.accelerator.autocast(), context():
+                loss = self.cfm_wrapper(wave)
 
-            self.accelerator.backward(loss / self.grad_accum_every)
+                self.accelerator.backward(loss / self.grad_accum_every)
 
             accum_log(logs, {'loss': loss.item() / self.grad_accum_every})
 
@@ -273,6 +281,7 @@ class VoiceBoxTrainer(nn.Module):
 
         if not steps % self.log_every:
             self.print(f"{steps}: loss: {logs['loss']:0.3f}")
+
         self.accelerator.log({"train_loss": logs['loss']}, step=steps)
 
         # sample results every so often
@@ -281,11 +290,13 @@ class VoiceBoxTrainer(nn.Module):
 
         if self.is_main and not (steps % self.save_results_every):
             wave, = next(self.valid_dl_iter)
-            
-            with torch.inference_mode():
-                self.cfm_wrapper.eval()
+            unwrapped_model = self.accelerator.unwrap_model(self.cfm_wrapper)
 
-                valid_loss = self.cfm_wrapper(wave)
+            with torch.inference_mode():
+                unwrapped_model.eval()
+
+                wave = wave.to(unwrapped_model.device)
+                valid_loss = unwrapped_model(wave)
 
                 self.print(f'{steps}: valid loss {valid_loss:0.3f}')
                 self.accelerator.log({"valid_loss": valid_loss}, step=steps)
