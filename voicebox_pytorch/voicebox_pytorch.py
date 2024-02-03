@@ -1052,17 +1052,18 @@ class VoiceBox(Module):
                 cond
             )
 
-            cond_ids = torch.where(
-                rearrange(cond_drop_mask, '... -> ... 1'),
-                self.null_cond_id,
-                cond_token_ids
-            )
+
 
         # phoneme or semantic conditioning embedding
 
         cond_emb = None
 
         if self.condition_on_text:
+            cond_ids = torch.where(
+                rearrange(cond_drop_mask, '... -> ... 1'),
+                self.null_cond_id,
+                cond_token_ids
+            )
             cond_emb = self.to_cond_emb(cond_ids)
 
             cond_emb_length = cond_emb.shape[-2]
