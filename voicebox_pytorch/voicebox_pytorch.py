@@ -3,6 +3,7 @@ import logging
 from random import random
 from functools import partial
 from pathlib import Path
+import time
 
 import torch
 from torch import nn, Tensor, einsum, IntTensor, FloatTensor, BoolTensor
@@ -997,6 +998,7 @@ class VoiceBox(Module):
         cond = None,
         cond_mask = None
     ):
+
         # project in, in case codebook dim is not equal to model dimensions
 
         x = self.proj_in(x)
@@ -1088,7 +1090,6 @@ class VoiceBox(Module):
         time_emb = self.sinu_pos_emb(times)
 
         # attend
-
         x = self.transformer(
             x,
             mask = self_attn_mask,
@@ -1117,6 +1118,7 @@ class VoiceBox(Module):
         num = reduce(loss, 'b n -> b', 'sum')
         den = loss_mask.sum(dim = -1).clamp(min = 1e-5)
         loss = num / den
+
 
         return loss.mean()
 
@@ -1294,8 +1296,8 @@ class ConditionalFlowMatcherWrapper(Module):
 
             return out
 
-        y0 = torch.randn_like(cond)
-        t = torch.linspace(0, 1, steps, device = self.device)
+        y0 = torch.randn_like(cond, dtype=cond.dtype)
+        t = torch.linspace(0, 1, steps, device = self.device, dtype=cond.dtype)
 
         if not self.use_torchode:
             LOGGER.debug('sampling with torchdiffeq')
