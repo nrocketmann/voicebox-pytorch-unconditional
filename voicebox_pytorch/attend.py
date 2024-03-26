@@ -89,17 +89,17 @@ class Attend(nn.Module):
 
         # pytorch 2.0 flash attn: q, k, v, mask, dropout, softmax_scale
 
-        if mask is not None:
-            with torch.backends.cuda.sdp_kernel(**config._asdict()):
-                out = F.scaled_dot_product_attention(
-                    q, k, v,
-                    attn_mask = mask,
-                    dropout_p = self.dropout if self.training else 0.
+        #if mask is not None:
+        with torch.backends.cuda.sdp_kernel(**config._asdict()):
+            out = F.scaled_dot_product_attention(
+                q, k, v,
+                attn_mask = mask,
+                dropout_p = self.dropout if self.training else 0.
                 )
-        else:
-            out = flash_attn_func(
-                q, k, v,  self.dropout if self.training else 0., causal=False
-            )
+        # else:
+        #     out = flash_attn_func(
+        #         q, k, v,  self.dropout if self.training else 0., causal=False
+        #     )
 
         return out
 
