@@ -1000,7 +1000,6 @@ class VoiceBox(Module):
     ):
 
         # project in, in case codebook dim is not equal to model dimensions
-
         x = self.proj_in(x)
 
         cond = default(cond, target)
@@ -1031,6 +1030,7 @@ class VoiceBox(Module):
             if not exists(cond_mask):
                 cond_mask = torch.ones((batch, seq_len), device = cond.device, dtype = torch.bool)
 
+        cond_mask = cond_mask[:,:cond.shape[1]]
         cond_mask_with_pad_dim = rearrange(cond_mask, '... -> ... 1')
 
         # as described in section 3.2
@@ -1209,6 +1209,9 @@ class ConditionalFlowMatcherWrapper(Module):
             self.voicebox.audio_enc_dec.eval()
             cond = self.voicebox.audio_enc_dec.encode(cond)
 
+        # import pdb
+        # pdb.set_trace()
+
         # setup text conditioning, either coming from duration model (as phoneme ids)
         # for coming from text-to-semantic module from spear-tts paper, as (semantic ids)
 
@@ -1294,10 +1297,14 @@ class ConditionalFlowMatcherWrapper(Module):
             if exists(packed_shape):
                 out = rearrange(out, 'b ... -> b (...)')
 
+
             return out
 
         y0 = torch.randn_like(cond, dtype=cond.dtype)
         t = torch.linspace(0, 1, steps, device = self.device, dtype=cond.dtype)
+
+        # import pdb 
+        # pdb.set_trace()
 
         if not self.use_torchode:
             LOGGER.debug('sampling with torchdiffeq')
@@ -1330,6 +1337,9 @@ class ConditionalFlowMatcherWrapper(Module):
 
             sampled = sol.ys[:, -1]
             sampled = unpack_one(sampled, packed_shape, 'b *')
+
+        # import pdb
+        # pdb.set_trace()
 
         if decode_to_codes and exists(self.voicebox.audio_enc_dec):
             return self.voicebox.audio_enc_dec.decode_to_codes(sampled)
